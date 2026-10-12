@@ -1,0 +1,72 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: SAA-C03 M1 - bucket de lab (v3 - echec volontaire)
+
+Parameters:
+  Environnement:
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - test
+    Description: Environnement du lab, utilise dans le nom du parametre SSM
+
+Resources:
+  LabBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: nettoyer-anciennes-versions
+            Status: Enabled
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 30
+          - Id: nettoyer-envois-incomplets
+            Status: Enabled
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 7
+
+  BucketNameParam:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub /saa-lab/${Environnement}/m1/bucket-name
+      Type: String
+      Value: !Ref LabBucket
+      Description: Nom du bucket de lab du module 1
+
+  # Nouvelle ressource : elle va echouer volontairement.
+  # Le principal designe un utilisateur IAM qui n'existe pas dans ton compte.
+  LabBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref LabBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: LecturePourUtilisateurInexistant
+            Effect: Allow
+            Principal:
+              AWS: !Sub arn:aws:iam::${AWS::AccountId}:user/utilisateur-inexistant-m1
+            Action: s3:GetObject
+            Resource: !Sub ${LabBucket.Arn}/*
+
+Outputs:
+  BucketName:
+    Description: Nom du bucket, genere par CloudFormation
+    Value: !Ref LabBucket
+  BucketArn:
+    Description: ARN du bucket
+    Value: !GetAtt LabBucket.Arn
+  ParamName:
+    Description: Nom du parametre SSM qui reference le bucket
+    Value: !Ref BucketNameParam
